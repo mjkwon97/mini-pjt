@@ -1,0 +1,66 @@
+# 규칙 숫자는 모두 여기서 읽는다. 금액은 USD. (예시 값, 실제 값으로 바꿔 쓴다)
+
+budget:
+  monthly_usd: 1500
+  yearly_usd: 18000
+
+# 등록 ETF 와 목표 비중 (합계 1.0)
+etfs:
+  VOO: 0.5
+  QQQ: 0.3
+  SCHD: 0.1
+  QQQM: 0.1
+
+market:
+  index_ticker: "^GSPC"
+  vix_ticker: "^VIX"
+  calendar: "XNYS"
+  lookback_days: 20
+
+signals:
+  drop_1: -0.01          # 하루 등락률 -1% 이하 → +1
+  drop_2: -0.02          # 하루 등락률 -2% 이하 → +2 (drop_1 대신)
+  below_high_ratio: 0.95 # 종가가 20일 고점의 95% 이하 → +1
+  volume_ratio: 1.5      # 하락일 거래량이 20일 평균의 1.5배 이상 → +1
+  vix_1: 20              # VIX 20 이상 → +1
+  vix_2: 30              # VIX 30 이상 → +2 (vix_1 대신)
+
+# 점수 구간별 배수. min_score 이상이면 해당 배수. 위에서부터 판정한다.
+multipliers:
+  - { min_score: 4, multiplier: 2.0, buy_today: true }
+  - { min_score: 2, multiplier: 1.5, buy_today: true }
+  - { min_score: 0, multiplier: 1.0, buy_today: false }  # 주 마지막 거래일에만 매수
+
+order:
+  fractional_us: false   # true 면 달러 금액, false 면 정수 주로 내림
+
+ledger:
+  db_path: "data/ledger.db"
+  dummy_buys_csv: "data/dummy_buys.csv"         # 평가·데모용 더미 매수 기록
+  dummy_holdings_csv: "data/dummy_holdings.csv" # 평가·데모용 초기 보유 수량
+
+# RAG (src/retriever.py). 임베딩 모델 ID 는 .env 의 BEDROCK_EMBED_MODEL_ID.
+rag:
+  docs_dir: "data/docs"
+  chunk_size: 700        # 글자 수. 먼저 ## 섹션으로 나누고, 길면 다시 자른다
+  chunk_overlap: 80
+  top_k: 3               # 최종 반환 청크 수
+  candidates: 8          # FAISS·BM25 각각에서 뽑는 후보 수
+  rrf_k: 60              # Reciprocal Rank Fusion 상수
+  weight_vector: 0.5     # 하이브리드 가중치 (벡터)
+  weight_bm25: 0.5       # 하이브리드 가중치 (BM25)
+
+# 입력 가드레일 (src/guardrails.py). 등록 ETF 는 위 etfs 목록이 기준이다.
+guardrails:
+  # 대문자 2~5자 단어 중 종목 코드가 아닌 것 (오탐 방지)
+  non_ticker_words: [ETF, ETFS, VIX, USD, KRW, NYSE, XNYS, GSPC, SP, DCA, AQR, AAII, ISO, "OK", "YES", "NO", API, AI, LLM, RAG, BUY, WAIT, HITL, IRA, US, USA, QA]
+  # 레버리지·인버스 상품 (대소문자 무시)
+  leveraged_tickers: [TQQQ, SQQQ, QLD, QID, SSO, UPRO, SPXL, SPXU, SPXS, SOXL, SOXS, TNA, TZA, TECL, FNGU, LABU, TSLL, NVDL, UVXY, SVXY]
+  leveraged_words: ["레버리지", "인버스", "곱버스", "콜옵션", "풋옵션", "선물옵션", "leverage", "inverse"]
+  # 한글로 쓰는 개별 종목·코인 (등록 외)
+  blocked_names: ["테슬라", "엔비디아", "애플", "삼성전자", "비트코인", "이더리움", "코인", "개별주"]
+
+# 출력 검사 (src/guardrails.py check_output)
+output_check:
+  tolerance_pct: 1.0     # 답의 숫자가 도구 결과 숫자와 이 % 안에서 같아야 한다
+  max_retries: 1         # 검사 실패 시 LLM 에게 다시 쓰게 하는 횟수. 그래도 실패하면 코드가 만든 답으로 바꾼다
